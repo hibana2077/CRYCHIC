@@ -10,15 +10,14 @@ from torch.nn.modules.utils import _ntuple, _triple
 
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.layers import SelectAdaptivePool2d, Linear, make_divisible
-from ._builder import build_model_with_cfg
-from ._efficientnet_blocks import SqueezeExcite, ConvBnAct
-from ._manipulate import checkpoint_seq
-from ._registry import register_model, generate_default_cfgs
+from ._efficientnet_blocks import SqueezeExcite, ConvBnAct # timm
 
-from mmcv.runner import _load_checkpoint, load_checkpoint
+from mmcv.runner import _load_checkpoint, load_checkpoint # mmcv
+from mmcv.cnn import constant_init, kaiming_init # mmcv
 
-from ...utils import cache_checkpoint, get_root_logger
-from ..builder import BACKBONES
+from ...utils import cache_checkpoint, get_root_logger # pyskl
+from ..builder import BACKBONES # pyskl
+
 
 __all__ = ['GhostNet3D']
 
@@ -210,219 +209,221 @@ class GhostBottleneck3D(nn.Module):
         x += self.shortcut(shortcut)
         return x
 
-
+#------------------------------------------------------------------------
+# 這裡就是實際要用 mmcv 的方式去做 backbone 註冊的 GhostNet3D
+#------------------------------------------------------------------------
+@BACKBONES.register_module()
 class GhostNet3D(nn.Module):
-    """
-    GhostNet 的 3D 版本，將所有 2D layer 改成 3D layer。
-    建議依需求調整各層的 kernel_size、stride、padding 等參數。
-    """
-    def __init__(
-            self,
-            cfgs,
-            num_classes=1000,
-            width=1.0,
-            in_chans=3,
-            output_stride=32,
-            global_pool='avg',
-            drop_rate=0.2,
-            version='v1',
-    ):
+    """範例：使用 mmcv 風格的 3D GhostNet backbone。"""
+
+    def __init__(self,
+                 cfgs=None,
+                 width=1.0,
+                 in_channels=3,
+                 out_indices=(3,),
+                 num_stages=5,
+                 output_stride=32,
+                 drop_rate=0.2,
+                 act_cfg=dict(type='ReLU', inplace=True),
+                 pretrained=None,
+                 init_cfg=None,  # mmcv 也支援 init_cfg，可自行擴充
+                 norm_eval=False,
+                 frozen_stages=-1,
+                 zero_init_residual=False,
+                 **kwargs):
+        """
+        Args:
+            cfgs (list): 與 2D GhostNet 相似，定義各 stage 的 kernel/expansion/se_ratio 等。
+            width (float): 通道寬度縮放係數。
+            in_channels (int): 輸入通道數。
+            out_indices (tuple): 輸出哪幾個 stage 的 feature map。
+            num_stages (int): 有幾個 stage。
+            output_stride (int): 只示範固定 32，不支援 dilation。
+            drop_rate (float): dropout 率。
+            act_cfg (dict): activation config, mmcv 風格。
+            pretrained (str): 若有預先訓練權重檔路徑，可指定。
+            norm_eval (bool): 是否將 BN 層設成 eval (不更新 mean/var)。
+            frozen_stages (int): 冷凍到第幾個 stage。-1 表示不凍結。
+            zero_init_residual (bool): 是否把最後的 BN 做 zero init。
+            kwargs: 其他額外引數。
+        """
         super().__init__()
-        assert output_stride == 32, '目前僅示範固定輸出步幅為 32，不支援 dilation'
-        self.cfgs = cfgs
-        self.num_classes = num_classes
+        # 針對 mmcv backbone 常見的參數設定
+        assert output_stride == 32, '目前只示範 stride=32，不支援其他 dilation'
+        self.cfgs = cfgs if cfgs is not None else self._get_default_cfgs()
+        self.width = width
+        self.in_channels = in_channels
+        self.num_stages = num_stages
+        self.out_indices = out_indices
         self.drop_rate = drop_rate
-        self.grad_checkpointing = False
-        self.feature_info = []
+        self.norm_eval = norm_eval
+        self.frozen_stages = frozen_stages
+        self.zero_init_residual = zero_init_residual
+        self.pretrained = pretrained
 
-        # 首層輸入 (in_chans -> stem_chs)
+        # stem
         stem_chs = make_divisible(16 * width, 4)
-        self.conv_stem = nn.Conv3d(in_chans, stem_chs, kernel_size=3, stride=2, padding=1, bias=False)
-        self.feature_info.append(dict(num_chs=stem_chs, reduction=2, module=f'conv_stem'))
+        self.conv_stem = nn.Conv3d(in_channels, stem_chs, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm3d(stem_chs)
-        self.act1 = nn.ReLU(inplace=True)
-        prev_chs = stem_chs
+        self.act1 = nn.ReLU(inplace=True)  # 這裡簡單示範
 
-        # 建立中間的 GhostBottleneck3D
-        stages = nn.ModuleList([])
-        stage_idx = 0
-        layer_idx = 0
-        net_stride = 2
-        for cfg in self.cfgs:
+        prev_chs = stem_chs
+        # 逐 stage 建構 GhostBottleneck3D
+        self.blocks = nn.ModuleList()
+        self.stage_idx_list = []  # 用於對應 out_indices
+
+        net_stride = 2  # 已經經過 stem (stride=2)
+        total_stages = len(self.cfgs)  # 預設 5 個 stage
+        stage_count = 0
+        for i, cfg in enumerate(self.cfgs):
             layers = []
-            s = 1
-            for k, exp_size, c, se_ratio, s in cfg:
+            s = 1  # 預設 stride
+            for (k, exp_size, c, se_ratio, s) in cfg:
                 out_chs = make_divisible(c * width, 4)
                 mid_chs = make_divisible(exp_size * width, 4)
-                layer_kwargs = {}
-                if version == 'v2' and layer_idx > 1:
-                    layer_kwargs['mode'] = 'attn'  # 僅示範使用 mode='attn' 分支
-                layers.append(
-                    GhostBottleneck3D(prev_chs, mid_chs, out_chs, k, s, se_ratio=se_ratio, **layer_kwargs)
+                layer = GhostBottleneck3D(
+                    in_chs=prev_chs,
+                    mid_chs=mid_chs,
+                    out_chs=out_chs,
+                    dw_kernel_size=k,
+                    stride=s,
+                    se_ratio=se_ratio,
+                    mode='original',
                 )
+                layers.append(layer)
                 prev_chs = out_chs
-                layer_idx += 1
 
+            # 若該 stage 的最後一個 layer stride>1，表示空間 stride 翻倍
             if s > 1:
                 net_stride *= 2
-                self.feature_info.append(dict(
-                    num_chs=prev_chs, reduction=net_stride, module=f'blocks.{stage_idx}'
-                ))
-            stages.append(nn.Sequential(*layers))
-            stage_idx += 1
+                stage_count += 1
 
-        # 最後一層
+            self.blocks.append(nn.Sequential(*layers))
+            self.stage_idx_list.append(i)
+
+        # 最後可能還有一層
         out_chs = make_divisible(exp_size * width, 4)
-        stages.append(nn.Sequential(
-            ConvBnAct(prev_chs, out_chs, kernel_size=1, act_layer=nn.ReLU)
-        ))
-        self.pool_dim = prev_chs = out_chs
-        self.blocks = nn.Sequential(*stages)
+        self.conv_last = nn.Conv3d(prev_chs, out_chs, kernel_size=1, bias=False)
+        self.bn_last = nn.BatchNorm3d(out_chs)
+        self.act_last = nn.ReLU(inplace=True)
 
-        # head
-        self.num_features = prev_chs
-        self.head_hidden_size = out_chs = 1280
-        # 這裡為了簡易示範，仍沿用 2D AdaptivePool，但實際上要改成 3D 版本或自定義 pool
-        self.global_pool = SelectAdaptivePool2d(pool_type=global_pool)
-        self.conv_head = nn.Conv3d(prev_chs, out_chs, kernel_size=1, stride=1, padding=0, bias=True)
-        self.act2 = nn.ReLU(inplace=True)
+        # 統一記錄可供輸出的層 (主要是 blocks + 最後一層)
+        self._all_blocks = [f'blocks.{i}' for i in range(len(self.blocks))]
+        self._all_blocks.append('conv_last')
 
-        # 這裡因為 SelectAdaptivePool2d 會先把維度縮成 2D，所以 flatten 在 forward_head 前
-        # 也可以根據需求，改寫成 nn.AdaptiveAvgPool3d(...) + Flatten。
-        self.flatten = nn.Flatten(1) if global_pool else nn.Identity()
-        self.classifier = Linear(out_chs, num_classes) if num_classes > 0 else nn.Identity()
+        # 預設只輸出最後一層 (即 stage 5)，若 out_indices 需要中間層，得對照 self._all_blocks[i] 的 idx
+        # 這裡只做簡單示範
+        # 例如 out_indices=(0,1,4) => 表示輸出 blocks.0, blocks.1, conv_last
+        self.init_weights()
 
-    @torch.jit.ignore
-    def group_matcher(self, coarse=False):
-        matcher = dict(
-            stem=r'^conv_stem|bn1',
-            blocks=[
-                (r'^blocks\.(\d+)' if coarse else r'^blocks\.(\d+)\.(\d+)', None),
-                (r'conv_head', (99999,))
-            ]
-        )
-        return matcher
+    def _get_default_cfgs(self):
+        """給個預設配置 (對應原 2D GhostNet)"""
+        cfgs = [
+            # stage0 (對應 stride=1)
+            [[3, 16, 16, 0, 1]],
+            # stage1
+            [[3, 48, 24, 0, 2], [3, 72, 24, 0, 1]],
+            # stage2
+            [[3, 72, 40, 0.25, 2], [3, 120, 40, 0.25, 1]],
+            # stage3
+            [[3, 240, 80, 0, 2],
+             [3, 200, 80, 0, 1],
+             [3, 184, 80, 0, 1],
+             [3, 480, 112, 0.25, 1],
+             [3, 672, 112, 0.25, 1]],
+            # stage4
+            [[3, 672, 160, 0.25, 2],
+             [3, 960, 160, 0, 1],
+             [3, 960, 160, 0.25, 1],
+             [3, 960, 160, 0, 1],
+             [3, 960, 160, 0.25, 1]]
+        ]
+        return cfgs
 
-    @torch.jit.ignore
-    def set_grad_checkpointing(self, enable=True):
-        self.grad_checkpointing = enable
+    def init_weights(self):
+        """mmcv 常用的 init_weights，可載入 pretrained 權重或初始化權重。"""
+        # 1) 先用 kaiming / constant init
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                kaiming_init(m)
+            elif isinstance(m, nn.BatchNorm3d):
+                constant_init(m, 1)
 
-    @torch.jit.ignore
-    def get_classifier(self) -> nn.Module:
-        return self.classifier
+        if self.zero_init_residual:
+            # 若想把最後一層 BN init to 0，視需求而定
+            for m in self.modules():
+                if isinstance(m, GhostBottleneck3D):
+                    # 與 ResNet3D 的 zero_init_residual 類似邏輯，可自行定義
+                    pass
 
-    def reset_classifier(self, num_classes: int, global_pool: str = 'avg'):
-        self.num_classes = num_classes
-        self.global_pool = SelectAdaptivePool2d(pool_type=global_pool)
-        self.flatten = nn.Flatten(1) if global_pool else nn.Identity()
-        self.classifier = Linear(self.head_hidden_size, num_classes) if num_classes > 0 else nn.Identity()
+        # 2) 若 self.pretrained 有指定，載入 checkpoint
+        if isinstance(self.pretrained, str):
+            logger = get_root_logger()
+            logger.info(f'Load GhostNet3D pretrained weights from: {self.pretrained}')
+            # 這裡單純 load_checkpoint，不做 inflate (因為已是 3D)
+            ckpt = cache_checkpoint(self.pretrained)
+            load_checkpoint(self, ckpt, strict=False, logger=logger)
 
-    def forward_features(self, x):
-        """
-        x shape: (N, C, D, H, W)
-        """
+    def _freeze_stages(self):
+        """依據 frozen_stages，凍結指定層。"""
+        # 假設 conv_stem + bn1 是 stage 0
+        if self.frozen_stages >= 0:
+            self.conv_stem.eval()
+            self.bn1.eval()
+            for param in self.conv_stem.parameters():
+                param.requires_grad = False
+            for param in self.bn1.parameters():
+                param.requires_grad = False
+
+        # 依序凍結 self.blocks, self.conv_last, ...
+        # 這裡簡單假設 blocks.x -> stage x+1
+        for i in range(1, self.frozen_stages + 1):
+            if i - 1 < len(self.blocks):
+                m = self.blocks[i - 1]
+                m.eval()
+                for param in m.parameters():
+                    param.requires_grad = False
+
+        # 若 frozen_stages >= num_stages (即凍結最後層)
+        # 可再對 conv_last 做凍結
+        if self.frozen_stages >= self.num_stages:
+            self.conv_last.eval()
+            self.bn_last.eval()
+            for param in self.conv_last.parameters():
+                param.requires_grad = False
+            for param in self.bn_last.parameters():
+                param.requires_grad = False
+
+    def forward(self, x):
+        """forward 過程: stem -> blocks -> conv_last -> return"""
         x = self.conv_stem(x)
         x = self.bn1(x)
         x = self.act1(x)
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            x = checkpoint_seq(self.blocks, x, flatten=True)
-        else:
-            x = self.blocks(x)
-        return x
 
-    def forward_head(self, x, pre_logits: bool = False):
-        # 先做 3D conv，再交給 2D 的 SelectAdaptivePool2d 縮成 (N, C, 1, 1)
-        # 若要真正 3D Pool，可以換成 nn.AdaptiveAvgPool3d(output_size=(1,1,1)) 再 flatten
-        # 這裡僅示範邏輯
-        x = self.conv_head(x)  # (N, 1280, D, H, W)
-        x = self.act2(x)
-        # SelectAdaptivePool2d 只會偵測到最後兩維，因此要先壓掉深度 D。
-        # 若不想壓深度，可自行改用 3D pool。
-        # 這裡簡單示範：先做個簡單的 3D AvgPool，把 D, H, W 都壓成 1
-        x = F.adaptive_avg_pool3d(x, (1, 1, 1))  # => (N, 1280, 1, 1, 1)
-        x = x.squeeze(-1).squeeze(-1).squeeze(-1)  # => (N, 1280)
-        # dropout
-        if self.drop_rate > 0.:
-            x = F.dropout(x, p=self.drop_rate, training=self.training)
-        return x if pre_logits else self.classifier(x)
+        outs = []
+        # 依序通過每個 blocks stage
+        for i, block in enumerate(self.blocks):
+            x = block(x)
+            if i in self.out_indices:
+                outs.append(x)
+        # 最後的 conv
+        x = self.conv_last(x)
+        x = self.bn_last(x)
+        x = self.act_last(x)
+        if (len(self.blocks)) in self.out_indices:  # 若指定要輸出最後 conv
+            outs.append(x)
 
-    def forward(self, x):
-        """
-        x shape: (N, C, D, H, W)
-        """
-        x = self.forward_features(x)
-        x = self.forward_head(x)
-        return x
+        # 只回傳一個就直接回傳張量，否則 tuple
+        if len(outs) == 1:
+            return outs[0]
+        return tuple(outs)
 
-
-def checkpoint_filter_fn(state_dict, model: nn.Module):
-    out_dict = {}
-    for k, v in state_dict.items():
-        if 'total' in k:
-            continue
-        out_dict[k] = v
-    return out_dict
-
-
-def _create_ghostnet3d(variant, width=1.0, pretrained=False, **kwargs):
-    """
-    可以比照 2D GhostNet 寫法，透過 build_model_with_cfg 來產生模型。
-    這裡僅提供示範，因此不針對預訓練權重做處理。
-    """
-    cfgs = [
-        # k, t, c, SE, s
-        # stage1
-        [[3, 16, 16, 0, 1]],
-        # stage2
-        [[3, 48, 24, 0, 2]],
-        [[3, 72, 24, 0, 1]],
-        # stage3
-        [[3, 72, 40, 0.25, 2]],
-        [[3, 120, 40, 0.25, 1]],
-        # stage4
-        [[3, 240, 80, 0, 2]],
-        [[3, 200, 80, 0, 1],
-         [3, 184, 80, 0, 1],
-         [3, 184, 80, 0, 1],
-         [3, 480, 112, 0.25, 1],
-         [3, 672, 112, 0.25, 1]],
-        # stage5
-        [[3, 672, 160, 0.25, 2]],
-        [[3, 960, 160, 0, 1],
-         [3, 960, 160, 0.25, 1],
-         [3, 960, 160, 0, 1],
-         [3, 960, 160, 0.25, 1]]
-    ]
-    model_kwargs = dict(
-        cfgs=cfgs,
-        width=width,
-        **kwargs,
-    )
-    return build_model_with_cfg(
-        GhostNet3D,
-        variant,
-        pretrained,
-        pretrained_filter_fn=checkpoint_filter_fn,
-        feature_cfg=dict(flatten_sequential=True),
-        **model_kwargs,
-    )
-
-
-# 以下示範幾個註冊好的 model，可依需求調整
-@register_model
-def ghostnet3d_050(pretrained=False, **kwargs) -> GhostNet3D:
-    """ GhostNet3D-0.5x """
-    model = _create_ghostnet3d('ghostnet3d_050', width=0.5, pretrained=pretrained, **kwargs)
-    return model
-
-@register_model
-def ghostnet3d_100(pretrained=False, **kwargs) -> GhostNet3D:
-    """ GhostNet3D-1.0x """
-    model = _create_ghostnet3d('ghostnet3d_100', width=1.0, pretrained=pretrained, **kwargs)
-    return model
-
-@register_model
-def ghostnet3d_130(pretrained=False, **kwargs) -> GhostNet3D:
-    """ GhostNet3D-1.3x """
-    model = _create_ghostnet3d('ghostnet3d_130', width=1.3, pretrained=pretrained, **kwargs)
-    return model
+    def train(self, mode=True):
+        """模型 train/val 模式切換時，需要依需求固定某些層的參數。"""
+        super().train(mode)
+        self._freeze_stages()
+        if mode and self.norm_eval:
+            # 將 BatchNorm 設為 eval
+            for m in self.modules():
+                if isinstance(m, nn.BatchNorm3d):
+                    m.eval()
