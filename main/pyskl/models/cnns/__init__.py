@@ -11,5 +11,5 @@ from .mobilenet3d import MobileNet3D
 from .vovnet3d import VoVNet3D
 
 __all__ = [
-    'C3D', 'X3D', 'ResNet', 'ResNet3d', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'RGBPoseConv3D', 'PoTion', 'MobileNet3D', 'VoVNet3D'
+    'C3D', 'X3D', 'ResNet', 'ResNet3d', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'RGBPoseConv3D', 'PoTion', 'GhostNet3d'
 ]
