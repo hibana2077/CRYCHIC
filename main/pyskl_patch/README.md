@@ -3,5 +3,5 @@
 ## 1. Move model files to pyskl directory
 
 ```bash
-mv -d pyskl/models/* pyskl/models/
+mv -d pyskl_patch/models/* pyskl/models/
 ```
