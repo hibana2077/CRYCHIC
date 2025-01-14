@@ -249,7 +249,7 @@ class GhostNet3D(nn.Module):
         """
         super().__init__()
         # 針對 mmcv backbone 常見的參數設定
-        assert output_stride == 32, '目前只示範 stride=32，不支援其他 dilation'
+        assert output_stride == 32, 'Only support output_stride=32'
         self.cfgs = cfgs if cfgs is not None else self._get_default_cfgs()
         self.width = width
         self.in_channels = in_channels
