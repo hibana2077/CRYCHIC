@@ -1,6 +1,8 @@
 import torch
 # model_pth = '../posec3d/posec3d/slowonly_r50_gym/joint/best_top1_acc_epoch_5.pth'
-model_pth = './X3D-shallow.pth'
+# model_pth = './X3D-shallow.pth'
+# model_pth = './bm.pth'
+model_pth = './r50_slowonly.pth'
 
 # 加載模型的 state_dict
 checkpoint = torch.load(model_pth, map_location='cpu')
