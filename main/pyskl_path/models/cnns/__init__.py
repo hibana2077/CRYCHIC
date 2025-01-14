@@ -7,8 +7,7 @@ from .resnet3d_slowfast import ResNet3dSlowFast
 from .resnet3d_slowonly import ResNet3dSlowOnly
 from .rgbposeconv3d import RGBPoseConv3D
 from .x3d import X3D
-from .mobilenet3d import MobileNet3D
-from .vovnet3d import VoVNet3D
+from .ghostnet3d import GhostNet3D
 
 __all__ = [
     'C3D', 'X3D', 'ResNet', 'ResNet3d', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'RGBPoseConv3D', 'PoTion', 'GhostNet3d'
