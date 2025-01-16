@@ -223,10 +223,19 @@ class GhostNet3D(nn.Module):
                  up_strides=(1, 2, 2, 2),
                  pretrained=None,
                  pool_strat='avg',
-                 act_layer=[nn.ReLU, nn.ReLU],
+                 act_layer=['ReLU'],
                  **kwargs):
         super().__init__()
         
+        act_dir = {
+            'ReLU': nn.ReLU,
+            'ReLU6': nn.ReLU6,
+            'LeakyReLU': nn.LeakyReLU,
+            'Hardtanh': nn.Hardtanh,
+            'Hardswish': nn.Hardswish,
+            'Hardsigmoid': nn.Hardsigmoid,
+        }
+
         from functools import reduce
         from operator import mul
 
@@ -238,6 +247,7 @@ class GhostNet3D(nn.Module):
         self.pool_strat = pool_strat
         self.pool_layer = nn.AvgPool3d if pool_strat == 'avg' else nn.MaxPool3d
         self.pretrained = pretrained
+        self.act_layer = [act_dir[act] for act in act_layer]
 
         # Define the GhostNet3D backbone
         self.model = nn.Sequential()
@@ -246,7 +256,7 @@ class GhostNet3D(nn.Module):
             if i == 0:
                 self.model.add_module(
                     f'layer{i}',
-                    GhostModule3DV2(in_channels, base_channels, act_layer=act_layer[i % len(act_layer)])
+                    GhostModule3DV2(in_channels, base_channels, act_layer=self.act_layer[i % len(self.act_layer)])
                 )
                 self.model.add_module(
                     f'pool{i}',
@@ -255,7 +265,7 @@ class GhostNet3D(nn.Module):
             else:
                 self.model.add_module(
                     f'layer{i}',
-                    GhostModule3DV2(base_channels * reduce(mul, self.up_strides[:i]), base_channels * reduce(mul, self.up_strides[:i+1]), act_layer=act_layer[i % len(act_layer)])
+                    GhostModule3DV2(base_channels * reduce(mul, self.up_strides[:i]), base_channels * reduce(mul, self.up_strides[:i+1]), act_layer=self.act_layer[i % len(self.act_layer)])
                 )
                 if i < num_stages - 1:
                     self.model.add_module(

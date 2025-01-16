@@ -1,6 +1,7 @@
 from functools import reduce
 from operator import mul
-a = [1,2,2,2]
+# a = [1,2,2,2]
+a = (1,2,2,2)
 base = 32
 
 for i in range(4):
