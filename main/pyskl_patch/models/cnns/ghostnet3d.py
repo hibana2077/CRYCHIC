@@ -237,6 +237,7 @@ class GhostNet3D(nn.Module):
         self.up_strides = up_strides
         self.pool_strat = pool_strat
         self.pool_layer = nn.AvgPool3d if pool_strat == 'avg' else nn.MaxPool3d
+        self.pretrained = pretrained
 
         # Define the GhostNet3D backbone
         self.model = nn.Sequential()
@@ -271,7 +272,15 @@ class GhostNet3D(nn.Module):
     def init_weights(self):
         """Initiate the parameters either from existing checkpoint or from
         scratch."""
-        pass
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                kaiming_init(m)
+        if isinstance(self.pretrained, str):
+            logger = get_root_logger()
+            logger.info(f'load model from: {self.pretrained}')
+            ckpt = cache_checkpoint(self.pretrained)
+            load_checkpoint(self, ckpt, strict=False, logger=logger)
+            logger.info(f'load model from: {self.pretrained} done')
 
     def forward(self, x):
         """Defines the computation performed at every call.
@@ -282,3 +291,5 @@ class GhostNet3D(nn.Module):
         Returns:
             torch.Tensor: The feature of the input samples extracted by the backbone.
         """
+        x = self.model(x)
+        return x
