@@ -256,6 +256,16 @@ class GhostNet3D(nn.Module):
                     f'layer{i}',
                     GhostModule3DV2(base_channels * reduce(mul, self.up_strides[:i]), base_channels * reduce(mul, self.up_strides[:i+1]), act_layer=act_layer[i % len(act_layer)])
                 )
+                if i < num_stages - 1:
+                    self.model.add_module(
+                        f'pool{i}',
+                        self.pool_layer(kernel_size=(1, 2, 2), stride=(1, 2, 2))
+                    )
+                else:
+                    self.model.add_module(
+                        f'pool{i}',
+                        nn.AdaptiveAvgPool3d((1, 1, 1))
+                    )
 
 
     def init_weights(self):
