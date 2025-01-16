@@ -4,5 +4,5 @@ cd pyskl
 conda env create -f pyskl.yaml
 conda activate pyskl
 pip install -e .
-conda install --force-reinstall python=3.8
-pip install timm
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+pip install timm #  OMG it can work with python 3.7
