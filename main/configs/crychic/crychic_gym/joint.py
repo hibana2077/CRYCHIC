@@ -1,7 +1,7 @@
 model = dict(
     type='Recognizer3D',
     backbone=dict(
-        type='C3D',
+        type='GhostNet3D',
         in_channels=17,
         base_channels=32,
         num_stages=3,
