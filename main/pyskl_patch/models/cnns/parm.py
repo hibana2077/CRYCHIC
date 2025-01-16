@@ -19,6 +19,8 @@ from calflops import calculate_flops
 #     GhostBottleneck3D(128, 128//2, 256, act_layer=nn.Hardsigmoid),
 #     nn.AdaptiveAvgPool3d((1, 1, 1)),
 # )
+# SiLU GhostNet3D FLOPs:1.0068 GFLOPS   MACs:480.575 MMACs   Params:283.808 K
+# HardSigmoid GhostNet3D FLOPs:997.954 MFLOPS   MACs:480.575 MMACs   Params:283.808 K
 model = nn.Sequential(
     GhostModule3DV2(17, 32, act_layer=nn.Hardsigmoid),
     nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)),
