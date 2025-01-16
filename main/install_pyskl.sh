@@ -5,3 +5,4 @@ conda env create -f pyskl.yaml
 conda activate pyskl
 pip install -e .
 conda install --force-reinstall python=3.8
+pip install timm
