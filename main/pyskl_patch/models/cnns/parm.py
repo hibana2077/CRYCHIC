@@ -12,11 +12,21 @@ from calflops import calculate_flops
 # model = GhostModule3D(17, 32, act_layer=nn.Hardsigmoid)
 # model = GhostModule3DV2(17, 32, act_layer=nn.Hardsigmoid)
 # model = GhostBottleneck3D(17, 17//2, 32, act_layer=nn.Hardsigmoid)
+# model = nn.Sequential(
+#     GhostBottleneck3D(17, 17//2, 32, act_layer=nn.Hardsigmoid),
+#     GhostBottleneck3D(32, 32//2, 64, act_layer=nn.Hardsigmoid),
+#     GhostBottleneck3D(64, 64//2, 128, act_layer=nn.Hardsigmoid),
+#     GhostBottleneck3D(128, 128//2, 256, act_layer=nn.Hardsigmoid),
+#     nn.AdaptiveAvgPool3d((1, 1, 1)),
+# )
 model = nn.Sequential(
-    GhostBottleneck3D(17, 17//2, 32, act_layer=nn.Hardsigmoid),
-    GhostBottleneck3D(32, 32//2, 64, act_layer=nn.Hardsigmoid),
-    GhostBottleneck3D(64, 64//2, 128, act_layer=nn.Hardsigmoid),
-    GhostBottleneck3D(128, 128//2, 256, act_layer=nn.Hardsigmoid),
+    GhostModule3DV2(17, 32, act_layer=nn.Hardsigmoid),
+    nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)),
+    GhostModule3DV2(32, 128, act_layer=nn.Hardsigmoid),
+    nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)),
+    GhostModule3DV2(128, 256, act_layer=nn.Hardsigmoid),
+    nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2)),
+    GhostModule3DV2(256, 512, act_layer=nn.Hardsigmoid),
     nn.AdaptiveAvgPool3d((1, 1, 1)),
 )
 batch_size = 1
