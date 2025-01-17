@@ -8,9 +8,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.utils import _ntuple, _triple
 
-from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-from timm.layers import SelectAdaptivePool2d, Linear, make_divisible
-from _efficientnet_blocks import SqueezeExcite, ConvBnAct # timm
+from timm.layers import make_divisible
+from _efficientnet_blocks import SqueezeExcite # timm
 
 from mmcv.runner import _load_checkpoint, load_checkpoint # mmcv
 from mmcv.cnn import constant_init, kaiming_init # mmcv
