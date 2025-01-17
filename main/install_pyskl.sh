@@ -5,4 +5,5 @@ conda env create -f pyskl.yaml
 conda activate pyskl
 pip install -e .
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
 pip install timm #  OMG it can work with python 3.7

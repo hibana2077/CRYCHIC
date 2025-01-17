@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _ntuple, _triple
 
 from timm.layers import make_divisible
-from _efficientnet_blocks import SqueezeExcite # timm
+from ._efficientnet_blocks import SqueezeExcite # timm
 
 from mmcv.runner import _load_checkpoint, load_checkpoint # mmcv
 from mmcv.cnn import constant_init, kaiming_init # mmcv
