@@ -6,7 +6,7 @@ CRYCHIC (Cross-modal Representation Yielding Complementary Hierarchical Integrat
 
 ```bash
 git clone https://github.com/hibana2077/CRYCHIC.git
-cd CRYCHIC
+cd CRYCHIC/main/
 bash ./conda.sh
 bash ./Anaxxx.sh
 bash ./install_pyskl.sh
