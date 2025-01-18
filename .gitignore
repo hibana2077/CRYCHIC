@@ -4,3 +4,5 @@ lab/bm.pth
 main/pyskl_patch/models/cnns/__pycache__/_efficientnet_blocks.cpython-311.pyc
 main/pyskl_patch/models/cnns/__pycache__/ghostnet3d.cpython-311.pyc
 lab/r50_slowonly.pth
+crychic.zip
+crychic/

@@ -254,6 +254,10 @@ class GhostNet3D(nn.Module):
         for i in range(num_stages):
             if i == 0:
                 self.model.add_module(
+                    f"Init_norm",
+                    nn.BatchNorm3d(in_channels)
+                )
+                self.model.add_module(
                     f'layer{i}',
                     GhostModule3DV2(in_channels, base_channels, act_layer=self.act_layer[i % len(self.act_layer)])
                 )
