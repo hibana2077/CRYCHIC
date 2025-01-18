@@ -19,12 +19,16 @@ if [ "$(printf '%s\n' "$required_version" "$conda_version" | sort -V | head -n1)
 fi
 
 # Create and activate the conda environment
-conda env create -f pyskl.yaml
-if [ $? -ne 0 ]; then
-  echo "Error creating conda environment. Exiting."
-  exit 1
-fi
-conda activate pyskl || { echo "Failed to activate conda environment. Exiting."; exit 1; }
+# conda env create -f pyskl.yaml
+# if [ $? -ne 0 ]; then
+#   echo "Error creating conda environment. Exiting."
+#   exit 1
+# fi
+# conda activate pyskl || { echo "Failed to activate conda environment. Exiting."; exit 1; }
+conda create -n pyskl_py38 python=3.8
+conda activate pyskl_py38
+pip install -r requirements.txt
+pip install --upgrade "yapf==0.32.0"
 
 # Install pyskl in editable mode
 pip install -e . || { echo "Failed to install pyskl. Exiting."; exit 1; }
