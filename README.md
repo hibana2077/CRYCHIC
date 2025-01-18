@@ -16,3 +16,9 @@ cd pyskl
 conda activate pyskl_py38
 pip install timm
 ```
+
+run experiments
+
+```bash
+bash tools/dist_train.sh configs/crychic/ghostnet3d_gym/joint.py 6 --validate --test-last --test-best
+```
