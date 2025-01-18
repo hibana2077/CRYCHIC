@@ -13,5 +13,6 @@ bash ./install_pyskl.sh
 bash ./download_skl.sh
 cd pyskl
 . "$HOME/.cargo/env"
+conda activate pyskl_py38
 pip install timm
 ```
