@@ -72,4 +72,4 @@ checkpoint_config = dict(interval=1)
 evaluation = dict(interval=1, metrics=['top_k_accuracy', 'mean_class_accuracy'], topk=(1, 5))
 log_config = dict(interval=20, hooks=[dict(type='TextLoggerHook')])
 log_level = 'INFO'
-work_dir = './work_dirs/posec3d/c3d_light_gym/joint'
+work_dir = './work_dirs/posec3d/ghostnet_light_gym/joint'
