@@ -2,7 +2,7 @@
 
 Hacked together by / Copyright 2019, Ross Wightman
 """
-from typing import Callable, Dict, Optional, Type
+from typing import Callable, Optional, Type
 
 import torch
 import torch.nn as nn
