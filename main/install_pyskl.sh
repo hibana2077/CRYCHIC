@@ -40,13 +40,4 @@ else
   echo "Rust is already installed."
 fi
 
-# Optional: Install timm with specific version compatibility
-python_version=$(python --version 2>&1 | awk '{print $2}')
-if [[ "$python_version" == 3.7* ]]; then
-  echo "Installing timm version compatible with Python 3.7..."
-  pip install timm || { echo "Failed to install timm. Exiting."; exit 1; }
-else
-  echo "Python version is not 3.7. Skipping timm installation."
-fi
-
 echo "Setup completed successfully."
