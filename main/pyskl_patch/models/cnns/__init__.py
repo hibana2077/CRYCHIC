@@ -10,5 +10,5 @@ from .x3d import X3D
 from .ghostnet3d import GhostNet3D
 
 __all__ = [
-    'C3D', 'X3D', 'ResNet', 'ResNet3d', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'RGBPoseConv3D', 'PoTion', 'GhostNet3d'
+    'C3D', 'X3D', 'ResNet', 'ResNet3d', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'RGBPoseConv3D', 'PoTion', 'GhostNet3D'
 ]
