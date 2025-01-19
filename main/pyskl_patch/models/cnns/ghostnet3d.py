@@ -9,13 +9,13 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _ntuple, _triple
 
 from timm.layers import make_divisible
-from ._efficientnet_blocks import SqueezeExcite # timm
+from _efficientnet_blocks import SqueezeExcite # timm
 
-from mmcv.runner import _load_checkpoint, load_checkpoint # mmcv
-from mmcv.cnn import constant_init, kaiming_init # mmcv
+# from mmcv.runner import _load_checkpoint, load_checkpoint # mmcv
+# from mmcv.cnn import constant_init, kaiming_init # mmcv
 
-from ...utils import cache_checkpoint, get_root_logger # pyskl
-from ..builder import BACKBONES # pyskl
+# from ...utils import cache_checkpoint, get_root_logger # pyskl
+# from ..builder import BACKBONES # pyskl
 
 
 __all__ = ['GhostNet3D']
@@ -211,7 +211,7 @@ class GhostBottleneck3D(nn.Module):
 # #------------------------------------------------------------------------
 # # 這裡就是實際要用 mmcv 的方式去做 backbone 註冊的 GhostNet3D
 # #------------------------------------------------------------------------
-@BACKBONES.register_module()
+# @BACKBONES.register_module()
 class GhostNet3D(nn.Module):
     """3D GhostNet backbone"""
 
@@ -255,7 +255,7 @@ class GhostNet3D(nn.Module):
             if i == 0:
                 self.model.add_module(
                     f'layer{i}',
-                    GhostModule3DV2(in_channels, base_channels, act_layer=self.act_layer[i % len(self.act_layer)], kernel_size=7)
+                    GhostModule3DV2(in_channels, base_channels, act_layer=self.act_layer[i % len(self.act_layer)], kernel_size=3)
                 )
                 self.model.add_module(
                     f'pool{i}',
@@ -264,7 +264,7 @@ class GhostNet3D(nn.Module):
             else:
                 self.model.add_module(
                     f'layer{i}',
-                    GhostModule3DV2(base_channels * reduce(mul, self.up_strides[:i]), base_channels * reduce(mul, self.up_strides[:i+1]), act_layer=self.act_layer[i % len(self.act_layer)])
+                    GhostModule3DV2(base_channels * reduce(mul, self.up_strides[:i]), base_channels * reduce(mul, self.up_strides[:i+1]), act_layer=self.act_layer[i % len(self.act_layer)], kernel_size=3 if i != 1 else 5)
                 )
                 if i < num_stages - 1:
                     self.model.add_module(
@@ -278,18 +278,18 @@ class GhostNet3D(nn.Module):
                     )
 
 
-    def init_weights(self):
-        """Initiate the parameters either from existing checkpoint or from
-        scratch."""
-        for m in self.modules():
-            if isinstance(m, nn.Conv3d):
-                kaiming_init(m)
-        if isinstance(self.pretrained, str):
-            logger = get_root_logger()
-            logger.info(f'load model from: {self.pretrained}')
-            ckpt = cache_checkpoint(self.pretrained)
-            load_checkpoint(self, ckpt, strict=False, logger=logger)
-            logger.info(f'load model from: {self.pretrained} done')
+    # def init_weights(self):
+    #     """Initiate the parameters either from existing checkpoint or from
+    #     scratch."""
+    #     for m in self.modules():
+    #         if isinstance(m, nn.Conv3d):
+    #             kaiming_init(m)
+    #     if isinstance(self.pretrained, str):
+    #         logger = get_root_logger()
+    #         logger.info(f'load model from: {self.pretrained}')
+    #         ckpt = cache_checkpoint(self.pretrained)
+    #         load_checkpoint(self, ckpt, strict=False, logger=logger)
+    #         logger.info(f'load model from: {self.pretrained} done')
 
     def forward(self, x):
         """Defines the computation performed at every call.
